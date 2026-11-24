@@ -261,17 +261,11 @@ Interactive docs: http://localhost:8000/docs
 
 | Week | Step |
 |---|---|
-| 1 | Pilot the queue with two agents. Track the Agree rate |
-| 2 | Make "what was missing" a required field when engineering returns a ticket |
-| 3 | Build a known-issue registry. Re-run the backtest |
-| 4 | Compare 4-week averages of avoidable escalations (baseline 56%), bounces and reopens |
+| 1 | Add data for future months to enable long-term trend analysis. This will also support accurate month-over-month performance comparisons |
+| 2 | Implement an automated system to reject tickets submitted with incomplete information any notifying client about the missing details |
+| 3 | Create and integrate a comprehensive known-issue guide into the workflow for both support agents and engineers along with clear resolution steps |
+| 4 | Introduce an automated weekly summary to evaluate overall performance. |
 
 **Success means** avoidable escalations and bounces fall while reopens stay flat, not only a lower open count.
 
 ---
-
-<div align="center">
-
-Built by **[Your Name](https://github.com/<your-username>)** · If this helped, give it a ⭐
-
-</div>
