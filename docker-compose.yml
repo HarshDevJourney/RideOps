@@ -1,0 +1,34 @@
+services:
+  backend:                    # FastAPI: http://localhost:8000 (API docs at /docs)
+    build: ./backend
+    image: rideops-backend:0.2
+    environment:
+      CORS_ORIGINS: "http://localhost:3000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - triage-state:/srv/data/state      # keeps agent feedback between restarts
+    restart: unless-stopped
+
+  frontend:                   # Next.js: http://localhost:3000
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: "http://backend:8000"
+    image: rideops-frontend:0.2
+    environment:
+      BACKEND_URL: "http://backend:8000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tests:                      # docker compose --profile test run --rm tests
+    build: ./backend
+    command: ["python", "-m", "pytest", "-q"]
+    profiles: ["test"]
+
+volumes:
+  triage-state:
