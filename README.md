@@ -14,11 +14,13 @@
 
 <br>
 
-<img src="docs/screenshots/overview.png" alt="RideOps Triage overview page" width="920">
+[Quick start](#-quick-start)&nbsp;&nbsp;·&nbsp;&nbsp;[What it does](#-what-it-does)&nbsp;&nbsp;·&nbsp;&nbsp;[Findings](#-what-the-data-says)&nbsp;&nbsp;·&nbsp;&nbsp;[How it works](#how-it-works)
 
 <br>
 
-[Quick start](#-quick-start) · [What it does](#-what-it-does) · [Findings](#-what-the-data-says) · [How it works](#-how-it-works) · [Honest limits](#-honest-limits)
+<img src="docs/screenshots/overview.png" alt="RideOps Triage overview page" width="920">
+
+<br>
 
 </div>
 
@@ -159,6 +161,7 @@ Solid tags are **facts** read from the data. Dashed tags are **predictions** lea
 
 > All advice is a suggestion. **Nothing is blocked, and P1 tickets are never held.**
 
+<a id="how-it-works"></a>
 ## ⚙️ How it works
 
 ```mermaid
