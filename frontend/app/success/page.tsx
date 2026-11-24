@@ -32,7 +32,7 @@ export default async function Success() {
           <tr key={m.key} style={{ cursor: 'default' }}><td><b>{m.label}</b></td><td><span className="role">{m.role}</span></td><td className="num">{fmtVal(m.fmt, m.baseline)}</td><td className="num">{fmtVal(m.fmt, m.latest)}</td>
             <td><Delta fmt={m.fmt} base={m.baseline} last={m.latest} better={m.better} /></td>
             <td className="num">{m.target == null ? 'Do not worsen' : m.key === 'net_backlog' ? 'At or below 0' : fmtVal(m.fmt, m.target, 0)}</td><td className="how">{m.how}</td></tr>))}</tbody></table></div>
-      <p className="fine">Baseline is the first 4 complete weeks ({s.baseline_weeks[0]} to {s.baseline_weeks[3]}). Latest is the last 4 ({s.latest_weeks[0]} to {s.latest_weeks[3]}). Weeks group tickets by the day they were created; the partial first and last weeks are left out. Each week has only about {perWeek} escalations, so single weeks swing widely: judge changes on 4-week averages. Targets are assumptions to agree with Ritika. {s.caveat}</p>
+      <p className="fine">Baseline is the first 4 complete weeks ({s.baseline_weeks[0]} to {s.baseline_weeks[s.baseline_weeks.length - 1]}). Latest is the last 4 ({s.latest_weeks[0]} to {s.latest_weeks[s.latest_weeks.length - 1]}). Weeks group tickets by the day they were created; the partial first and last weeks are left out. Each week has only about {perWeek} escalations, so single weeks swing widely: judge changes on 4-week averages. Targets are assumptions to agree with Ritika. {s.caveat}</p>
     </>
   );
 }

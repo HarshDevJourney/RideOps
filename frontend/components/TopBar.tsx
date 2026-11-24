@@ -1,7 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 
-const TITLES: Record<string, string> = { '/': 'Overview', '/queue': 'Open queue', '/try': 'Try a ticket', '/backlog': 'Backlog', '/escalations': 'Escalations', '/agents': 'Agents', '/clients': 'Clients', '/success': 'Success measure', '/backtest': 'Backtest' };
+const TITLES: Record<string, string> = { '/': 'Overview', '/queue': 'Open queue', '/try': 'Try a ticket', '/backlog': 'Backlog', '/escalations': 'Escalations', '/agents': 'Agents', '/clients': 'Clients', '/success': 'Success measure', '/backtest': 'Backtest', '/data': 'Add data' };
 
 export function TopBar({ asOf, tickets }: { asOf?: string; tickets?: number }) {
   const path = usePathname();

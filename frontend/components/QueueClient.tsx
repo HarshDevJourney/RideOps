@@ -4,7 +4,7 @@ import { MiniBars } from '@/components/charts';
 import { Drawer } from '@/components/Drawer';
 import { PageHead, PriPill, StatCard, StatusPill, TagPill } from '@/components/ui';
 import { api } from '@/lib/client-api';
-import { num } from '@/lib/format';
+import { fmtDate, num } from '@/lib/format';
 import { toast } from '@/lib/toast';
 import type { Meta, QueueData, QueueItem } from '@/lib/types';
 
@@ -72,7 +72,7 @@ export function QueueClient({ data, meta }: { data: QueueData; meta: Meta }) {
 
   return (
     <>
-      <PageHead title="Open queue" sub={`The ${totals.open} tickets still open on 30 Sep, most urgent first. Open one to see what to do next.`} right={<button className="btn" onClick={exportCsv}>Export CSV</button>} />
+      <PageHead title="Open queue" sub={`The ${totals.open} tickets still open on ${fmtDate(meta.as_of, false)}, most urgent first. Open one to see what to do next.`} right={<button className="btn" onClick={exportCsv}>Export CSV</button>} />
       <div className="grid g4">
         <StatCard label="Open tickets" value={num(totals.open)} sub={`${totals.with_l1} with L1, ${totals.with_engineering} with engineering`} chart={<MiniBars values={ageHist(items)} label="Open tickets by age in days" />} foot={foot} />
         <StatCard label="Waiting on L1 to act" value={num(totals.l1_action)} sub="Engineering has already answered" chart={<MiniBars values={ageHist(needL1)} label="Tickets waiting on L1, by age" />} foot={foot} />

@@ -16,3 +16,10 @@ export function deltaInfo(fmt: Fmt, base?: number | null, last?: number | null, 
   const text = fmt === 'pct' ? `${sign}${(diff * 100).toFixed(1)} pts` : fmt === 'hours' ? `${sign}${diff.toFixed(1)}h` : `${sign}${diff.toFixed(1)}`;
   return { text, tone: (better === 'lower') === (diff < 0) ? 'good' : 'bad' };
 }
+
+/** "2026-09-30T23:59" -> "30 Sep 2026" (day = false drops the year: "30 Sep"). */
+export const fmtDate = (iso?: string | null, year = true) =>
+  iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) }) : '–';
+
+/** "2026-10" -> "Oct 2026" */
+export const monthLabel = (ym: string) => new Date(`${ym}-01T00:00`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });

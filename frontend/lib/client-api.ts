@@ -10,6 +10,9 @@ async function call(path: string, init?: RequestInit) {
 }
 
 export const api = {
+  del: (path: string) => call(path, { method: 'DELETE' }),
+  /** Send a file as the raw request body (used by the Data page). */
+  upload: (path: string, file: Blob) => call(path, { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: file }),
   get: (path: string) => call(path),
   post: (path: string, body: unknown) => call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
 };

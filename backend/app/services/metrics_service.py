@@ -33,26 +33,36 @@ class MetricsService:
         }
 
     def _monthly(self) -> list:
-        d = self.df.assign(month=self.df.created_at.dt.strftime("%b"))
+        """One row per calendar month in the data. The latest month is marked partial if the data stops before it ends."""
+        d, as_of = self.df, self.repo.as_of
+        per = d.created_at.dt.to_period("M")
+        several_years = per.dt.year.nunique() > 1
         rows = []
-        for m in ["Jul", "Aug", "Sep"]:
-            g = d[d.month == m]
-            rows.append({"month": m, "tickets": len(g), "escalated": int(g.escalated.sum()), "avoidable": int(g.avoidable.sum())})
+        for p in sorted(per.unique()):
+            g = d[per == p]
+            rows.append({"month": p.strftime("%b %Y") if several_years else p.strftime("%b"), "key": str(p),
+                         "tickets": len(g), "escalated": int(g.escalated.sum()), "avoidable": int(g.avoidable.sum()),
+                         "partial": bool(as_of.date() < p.end_time.date())})
         return rows
 
-    def category_trend(self) -> list:
-        """Which categories grew from July to September?"""
-        d = self.df.assign(month=self.df.created_at.dt.strftime("%b"))
+    def category_trend(self) -> dict:
+        """Which categories grew from the first month to the latest complete month?"""
+        d, months = self.df.assign(month=self.df.created_at.dt.to_period("M").astype(str)), self._monthly()
+        complete = [m for m in months if not m["partial"]] or months
+        first, last = complete[0], complete[-1]
         t = d.pivot_table(index="category", columns="month", values="ticket_id", aggfunc="count", fill_value=0)
-        rows = [{"category": c, "jul": int(t.loc[c, "Jul"]), "aug": int(t.loc[c, "Aug"]), "sep": int(t.loc[c, "Sep"]),
-                 "change": int(t.loc[c, "Sep"] - t.loc[c, "Jul"])} for c in t.index]
-        return sorted(rows, key=lambda r: -r["change"])
+        n = lambda c, key: int(t.loc[c, key]) if key in t.columns else 0
+        rows = [{"category": c, "first": n(c, first["key"]), "last": n(c, last["key"]),
+                 "change": n(c, last["key"]) - n(c, first["key"]),
+                 "by_month": {m["key"]: n(c, m["key"]) for m in months}} for c in t.index]
+        return {"first_label": first["month"], "last_label": last["month"],
+                "rows": sorted(rows, key=lambda r: -r["change"])}
 
     def success(self) -> dict:
         """The weekly success measure. Weeks are cohorts: tickets grouped by the week they were created."""
         d = self.df.copy()
         d["week"] = d.created_at.dt.normalize() - pd.to_timedelta(d.created_at.dt.weekday, unit="D")
-        as_of, first_day = pd.Timestamp(config.AS_OF), d.created_at.min().normalize()
+        as_of, first_day = pd.Timestamp(self.repo.as_of), d.created_at.min().normalize()
 
         def kpis(g):
             esc = g[g.escalated]
@@ -95,7 +105,7 @@ class MetricsService:
                 "caveat": "Recent weeks can look better than they are: open tickets are not yet counted as reopened or closed."}
 
     def weekly_backlog(self) -> list:
-        d, as_of = self.df, pd.Timestamp(config.AS_OF)
+        d, as_of = self.df, pd.Timestamp(self.repo.as_of)
         first = (d.created_at.min().normalize() - pd.Timedelta(days=d.created_at.min().weekday()))
         rows = []
         for w in pd.date_range(first, as_of, freq="7D"):
@@ -104,7 +114,8 @@ class MetricsService:
             closed = int(((d.final_closed_at >= w) & (d.final_closed_at < w + pd.Timedelta(days=7))).sum())
             open_end = int(((d.created_at <= end) & (d.final_closed_at.isna() | (d.final_closed_at > end))).sum())
             rows.append({"week": w.strftime("%d %b"), "created": created, "closed": closed,
-                         "net": created - closed, "open_at_end": open_end})
+                         "net": created - closed, "open_at_end": open_end,
+                         "partial": bool(w < d.created_at.min().normalize() or w + pd.Timedelta(days=7) > as_of)})
         return rows
 
     def escalation_yield(self) -> dict:

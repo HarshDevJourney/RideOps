@@ -14,7 +14,8 @@ function Finding({ href, label, value, sub, chart }: { href: string; label: stri
 
 export default async function Overview() {
   const [s, q, bounce, agents, success]: Any[] = await Promise.all(['/metrics/summary', '/queue', '/metrics/bounce', '/metrics/agents', '/metrics/success'].map((p) => getJSON(p)));
-  const [jul, , sep] = s.monthly, growth = sep.tickets / jul.tickets - 1;
+  const done = s.monthly.filter((m: Any) => !m.partial), months = done.length ? done : s.monthly;   // the latest month only counts once it is complete
+  const first = months[0], last = months[months.length - 1], growth = last.tickets / first.tickets - 1;
   const hours = success.measures.find((m: Any) => m.key === 'median_hours');
   const h0 = bounce.by_handoffs[0], h3 = bounce.by_handoffs[3];
   const fast = [...agents].sort((a: Any, b: Any) => a.median_hours - b.median_hours)[0];
@@ -24,7 +25,7 @@ export default async function Overview() {
       <div className="callout"><span><b>{q.totals.l1_action} of the {q.totals.open} open tickets are waiting on L1 to act</b>, not on engineering. Engineering has already answered them: sent back for info or config, flagged as a duplicate, or fixed and waiting to be closed.</span>
         <span className="grow" /><Link className="btn primary" href="/queue">Open the queue</Link></div>
       <div className="grid g4">
-        <Finding href="/backlog" label="Volume" value={`+${Math.round(growth * 100)}%`} sub={`${jul.tickets} tickets in July, ${sep.tickets} in September. Median close time moved only ${hours.baseline}h to ${hours.latest}h.`} chart={<MiniBars values={success.weekly.filter((w: Any) => !w.partial).map((w: Any) => w.tickets)} label="Tickets per week" />} />
+        <Finding href="/backlog" label="Volume" value={`+${Math.round(growth * 100)}%`} sub={`${first.tickets} tickets in ${first.month}, ${last.tickets} in ${last.month}. Median close time moved only ${hours.baseline}h to ${hours.latest}h.`} chart={<MiniBars values={success.weekly.filter((w: Any) => !w.partial).map((w: Any) => w.tickets)} label="Tickets per week" />} />
         <Finding href="/escalations" label="Escalations that were not real fixes" value={pct(s.avoidable_rate)} sub={`${s.avoidable} of ${s.escalated} escalations came back as info, config, duplicate, how-to or not reproducible.`} chart={<MiniBars values={Object.values(s.outcomes) as number[]} label="Engineering outcomes" />} />
         <Finding href="/escalations" label="Cost of bouncing" value={<>{h0.median_hours}<small>to</small>{h3.median_hours}h</>} sub={`Median time to close with 0 and with 3 handoffs. CSAT falls from ${h0.csat} to ${h3.csat}.`} chart={<MiniBars values={bounce.by_handoffs.map((r: Any) => r.median_hours)} label="Median hours by handoffs" />} />
         <Finding href="/agents" label="Fast is not solved" value={pct(fast.reopen_rate)} sub={`${fast.agent} closes fastest (${fast.median_hours}h) but ${pct(fast.reopen_rate)} of those tickets are reopened. The team is at ${pct(s.reopen_rate)}.`} chart={<MiniBars values={agents.map((a: Any) => a.reopen_rate)} label="Reopen rate by agent" />} />

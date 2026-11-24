@@ -4,10 +4,15 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_PATH = BASE_DIR / "data" / "rideops_support_tickets.csv"
-FEEDBACK_PATH = BASE_DIR / "data" / "state" / "feedback.json"
+STATE_DIR = BASE_DIR / "data" / "state"    # agent feedback, uploaded ticket files and their settings (a Docker volume)
+FEEDBACK_PATH = STATE_DIR / "feedback.json"
 
-AS_OF = datetime(2026, 9, 30, 23, 59)      # the data was pulled on 30 Sep 2026
-BACKTEST_SPLIT = "2026-09-01"              # learn from Jul-Aug, replay September
+# The "as of" date now comes from the data itself (the latest timestamp in the tickets, or the date typed on the
+# Data page). This value is only the fallback for a ticket that is built by hand, for example in unit tests.
+AS_OF = datetime(2026, 9, 30, 23, 59)
+BACKTEST_FIRST_SPLIT_DAYS = 13   # earliest backtest date = first ticket date + this many days (enough to learn from)
+BACKTEST_LAST_SPLIT_DAYS = 5     # latest backtest date = "as of" date minus this many days (enough to replay)
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 MIN_REPEATS = 30          # a description repeated this often (on full data) counts as a known issue
 BOUNCE_AT = 2             # engineering handoffs at which a ticket is "bouncing"
@@ -18,7 +23,6 @@ GATE_MIN_EVIDENCE = 10
 REOPEN_RISK_FLAG = 0.20   # predicted reopen chance at which we show REOPEN_RISK
 # ASSUMPTION: suggested targets for the weekly success measure. Agree the real ones with Ritika before a pilot.
 SUCCESS_TARGETS = {"avoidable_rate": 0.40, "bounce_rate": 0.10, "net_backlog": 0}
-BACKTEST_MIN, BACKTEST_MAX = "2026-07-15", "2026-09-25"   # split must leave data on both sides
 
 CLIENT_ALERT_SHARE = 0.10   # one client causing >=10% of escalations raises an alert
 CLIENT_WATCH_RATE = 0.60    # ...or >=60% of its tickets escalated (min 10 tickets)

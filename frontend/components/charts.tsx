@@ -34,7 +34,7 @@ export function WeeklyChart({ rows }: { rows: Any[] }) {
           <g key={r.week}>
             <rect x={gx - bw - 1} y={y(r.created)} width={bw} height={H - B - y(r.created)} rx={2} fill="var(--amber)"><title>{`${r.week}: ${r.created} created`}</title></rect>
             <rect x={gx + 1} y={y(r.closed)} width={bw} height={H - B - y(r.closed)} rx={2} fill="#44444b"><title>{`${r.week}: ${r.closed} closed`}</title></rect>
-            <text x={gx} y={H - 10} textAnchor="middle">{r.week}</text>
+            {rows.length <= 14 || i % 2 === 0 ? <text x={gx} y={H - 10} textAnchor="middle">{r.week}</text> : null}
           </g>
         );
       })}

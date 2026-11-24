@@ -34,8 +34,11 @@ def test_success_weeks_cover_all_tickets(ctx):
 
 
 def test_category_trend_adds_up(ctx):
-    rows = ctx.metrics.category_trend()
-    assert sum(r["jul"] + r["aug"] + r["sep"] for r in rows) == 1444
+    trend = ctx.metrics.category_trend()
+    assert sum(sum(r["by_month"].values()) for r in trend["rows"]) == 1444
+    assert (trend["first_label"], trend["last_label"]) == ("Jul", "Sep")
+    top = trend["rows"][0]
+    assert (top["category"], top["first"], top["last"], top["change"]) == ("Cab delay / no-show complaint", 29, 72, 43)
 
 
 def test_every_open_ticket_gets_a_verdict_with_an_action(ctx):

@@ -2,7 +2,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import List, Optional
 
-from app.config import AS_OF
+from app import config
 
 
 @dataclass
@@ -25,6 +25,7 @@ class Ticket:
     csat_score: Optional[float] = None
     channel: str = ""
     info_provided: List[str] = field(default_factory=list)  # filled only by the manual "Try a ticket" form
+    as_of: datetime = config.AS_OF   # when the data was pulled; the repository sets this for every real ticket
 
     def is_open(self) -> bool:
         return self.status.startswith("Open")
@@ -35,7 +36,7 @@ class Ticket:
         return (self.final_closed_at - self.created_at).total_seconds() / 3600
 
     def age_days(self) -> int:
-        return max(0, (AS_OF - self.created_at).days)
+        return max(0, (self.as_of - self.created_at).days)
 
     def masked(self) -> "Ticket":
         """What L1 knew BEFORE escalating. The backtester uses this so no future facts leak into a prediction."""

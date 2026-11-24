@@ -15,15 +15,16 @@ router = APIRouter(prefix="/api", tags=["queue"])
 
 @router.get("/meta")
 def meta(ctx: AppContext = Depends(get_ctx)):
-    return {"as_of": config.AS_OF.isoformat(timespec="minutes"), "tags": TAG_META,
+    bt = ctx.repo.backtest_window()
+    return {"as_of": ctx.repo.as_of.isoformat(timespec="minutes"), "first_date": ctx.repo.first_day.date().isoformat(), "tags": TAG_META,
             "categories": sorted(config.REQUIRED_INFO), "required_info": config.REQUIRED_INFO,
-            "default_split": config.BACKTEST_SPLIT, "split_min": config.BACKTEST_MIN, "split_max": config.BACKTEST_MAX, "tickets": len(ctx.repo.all()),
+            "default_split": bt["default"], "split_min": bt["min"], "split_max": bt["max"], "tickets": len(ctx.repo.all()),
             "open": len(ctx.repo.open_queue())}
 
 
 @router.get("/queue")
 def queue(ctx: AppContext = Depends(get_ctx)):
-    """The 48 tickets still open on 30 Sep, each with tags and a recommended action."""
+    """The tickets still open on the data's "as of" date, each with tags and a recommended action."""
     rows = ctx.triage.tag_queue(ctx.repo.open_queue())
     items = [{**ticket_to_dict(t), "verdict": v.to_dict(), "feedback": ctx.feedback.for_ticket(t.ticket_id)} for t, v in rows]
     counts = Counter(tag for _, v in rows for tag in v.tags)
@@ -51,7 +52,7 @@ def triage_manual(req: TriageRequest, ctx: AppContext = Depends(get_ctx)):
     """Manual form: type a new ticket and see what the tool would advise before escalating."""
     if req.category not in config.REQUIRED_INFO:
         raise HTTPException(422, "Pick one of the known categories.")
-    t = Ticket(ticket_id="NEW-TICKET", created_at=config.AS_OF, client_id="", client_name="Manual entry",
+    t = Ticket(ticket_id="NEW-TICKET", created_at=ctx.repo.as_of, as_of=ctx.repo.as_of, client_id="", client_name="Manual entry",
                category=req.category, priority=req.priority, description=req.description, info_provided=req.info_provided)
     return {**ticket_to_dict(t), "verdict": ctx.triage.assess(t).to_dict()}
 
