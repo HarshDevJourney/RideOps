@@ -1,0 +1,17 @@
+services:
+  triage:
+    build: .
+    image: rideops-triage:0.1
+    ports:
+      - "8000:8000"
+    volumes:
+      - triage-feedback:/srv/data/state   # keeps agent feedback between restarts
+    restart: unless-stopped
+
+  tests:                      # docker compose run --rm tests
+    build: .
+    command: ["python", "-m", "pytest", "-q"]
+    profiles: ["test"]
+
+volumes:
+  triage-feedback:
