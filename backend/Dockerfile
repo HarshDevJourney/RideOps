@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY data ./data
-COPY tests ./tests
 
 # Run as a non-root user; feedback is written to /srv/data/state
 RUN useradd --create-home appuser && mkdir -p /srv/data/state && chown -R appuser /srv/data
