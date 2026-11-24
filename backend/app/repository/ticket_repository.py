@@ -31,24 +31,25 @@ class TicketRepository:
         self.as_of_is_manual = False
         self.latest_event: datetime = config.AS_OF    # end of the latest day on which anything happened to a ticket
 
-    def load_csv(self, path, extra: Optional[pd.DataFrame] = None, as_of: Optional[str] = None) -> "TicketRepository":
-        """Read the base CSV, then lay uploaded rows on top (a ticket ID in `extra` replaces the same ID in the base).
+    def load_csv(self, path, as_of: Optional[str] = None) -> "TicketRepository":
+        return self.load_frames([pd.read_csv(path, dtype=str)], as_of)
 
-        `extra` holds text columns exactly as in the CSV. `as_of` is an optional date typed by the user; without it the
-        data is taken to be pulled at the end of the latest day that appears in any timestamp."""
-        raw = pd.read_csv(path, dtype=str)
-        if extra is not None and len(extra):
-            raw = pd.concat([raw, extra.reindex(columns=raw.columns)], ignore_index=True)
-            raw = raw.drop_duplicates("ticket_id", keep="last").reset_index(drop=True)
+    def load_frames(self, frames: List[pd.DataFrame], as_of: Optional[str] = None) -> "TicketRepository":
+        """Combine one or more tables of tickets (text columns exactly as in the CSV). If a ticket ID appears more than
+        once, the later table wins. `as_of` is an optional date typed by the user; without it the data is taken to be
+        pulled at the end of the latest day that appears in any timestamp (a typed date earlier than that is ignored)."""
+        raw = pd.concat([f.reindex(columns=frames[0].columns) for f in frames], ignore_index=True)
+        raw = raw.drop_duplicates("ticket_id", keep="last").reset_index(drop=True)
         df = self._typed(raw)
         df["escalated"] = df["escalated_to_eng"].eq("Yes")
         df["avoidable"] = df["escalated"] & df["eng_outcome"].notna() & df["eng_outcome"].ne(FIXED)
         df["ttr_hours"] = (df["final_closed_at"] - df["created_at"]).dt.total_seconds() / 3600
         self.df = df
         latest = max(df[c].max() for c in _DATES if df[c].notna().any())
-        self.as_of_is_manual = bool(as_of)
         self.latest_event = end_of_day(latest)
-        self.as_of = end_of_day(as_of) if as_of else self.latest_event
+        typed = end_of_day(as_of) if as_of else None
+        self.as_of_is_manual = bool(typed and typed >= self.latest_event)
+        self.as_of = typed if self.as_of_is_manual else self.latest_event
         self._tickets = [self._to_ticket(r) for r in df.itertuples(index=False)]
         self._by_id = {t.ticket_id: t for t in self._tickets}
         return self

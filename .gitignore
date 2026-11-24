@@ -6,3 +6,5 @@ backend/data/state/
 node_modules/
 .next/
 .env.local
+backend/data/uploads/*
+!backend/data/uploads/README.md

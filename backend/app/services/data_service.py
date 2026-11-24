@@ -1,17 +1,22 @@
-"""Adding more months of tickets: check an uploaded CSV, merge it with what is already loaded, and report what changed.
+"""Ticket datasets: the original CSV plus every CSV in the uploads folder.
 
-The original CSV in backend/data is never touched. Uploaded rows are kept in their own file in the state folder and laid
-on top when the app loads (a ticket ID that appears in both is taken from the upload). "Reset" deletes that file."""
+* The original file in backend/data is never changed.
+* Each upload is saved as its own CSV in backend/data/uploads. Delete a file there and it is no longer used.
+  A CSV dropped into that folder by hand shows up too.
+* Which datasets the app analyses is a setting (the Add data page). The chosen files are combined: if a ticket ID is in
+  more than one file, the newest file wins (that is how an open ticket gets its close date)."""
 import io
 import json
+import re
 import threading
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 
 from app import config
-from app.repository.ticket_repository import TicketRepository, end_of_day
+from app.repository.ticket_repository import TicketRepository
 from app.tags import CONFIG, DUPLICATE_O, FIXED, HOWTO_O, INSUFFICIENT, NOTREPRO_O
 
 COLUMNS = ["ticket_id", "created_at", "channel", "client_id", "client_name", "client_tier", "category", "priority",
@@ -23,42 +28,11 @@ REQUIRED_VALUES = ["ticket_id", "created_at", "client_id", "client_name", "categ
 STATUSES = {"Closed", "Open - with L1", "Open - with Engineering"}
 OUTCOMES = {FIXED, INSUFFICIENT, CONFIG, DUPLICATE_O, HOWTO_O, NOTREPRO_O}
 MAX_SHOWN = 12
+ORIGINAL_ID = "original"
 
 
 class UploadError(ValueError):
     """The file cannot be read at all (empty, wrong encoding, too large)."""
-
-
-class DataStore:
-    """Where uploaded rows and the typed-in 'as of' date live on disk."""
-
-    def __init__(self, state_dir: Path = config.STATE_DIR):
-        self.dir = Path(state_dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self.uploaded_path, self.meta_path = self.dir / "uploaded_tickets.csv", self.dir / "data_meta.json"
-        self._lock = threading.Lock()
-
-    def uploaded(self) -> Optional[pd.DataFrame]:
-        if not self.uploaded_path.exists():
-            return None
-        df = pd.read_csv(self.uploaded_path, dtype=str)
-        return df if len(df) else None
-
-    def as_of(self) -> Optional[str]:
-        try:
-            return json.loads(self.meta_path.read_text()).get("as_of")
-        except (OSError, ValueError):
-            return None
-
-    def save(self, frame: pd.DataFrame, as_of: Optional[str]) -> None:
-        with self._lock:
-            frame.to_csv(self.uploaded_path, index=False)
-            self.meta_path.write_text(json.dumps({"as_of": as_of}))
-
-    def reset(self) -> None:
-        with self._lock:
-            for p in (self.uploaded_path, self.meta_path):
-                p.unlink(missing_ok=True)
 
 
 def _row(i) -> int:
@@ -144,62 +118,185 @@ def check_rows(df: pd.DataFrame, known_categories: set) -> dict:
     return {"clean": clean.fillna(""), "errors": errors, "warnings": warnings}
 
 
-class DataService:
-    def __init__(self, store: DataStore, base_path: Path = config.DATA_PATH):
-        self.store, self.base_path = store, Path(base_path)
+@dataclass
+class Dataset:
+    id: str                       # "original", or the file name inside the uploads folder
+    name: str
+    kind: str                     # "original" or "upload"
+    modified: float
+    frame: Optional[pd.DataFrame] = None     # the cleaned tickets, None when the file has problems
+    tickets: int = 0
+    first: str = ""
+    last: str = ""
+    problems: List[str] = field(default_factory=list)
+    selected: bool = False
 
-    def window(self, repo: TicketRepository) -> dict:
-        months = {}
-        for t in repo.all():
-            months[t.created_at.strftime("%Y-%m")] = months.get(t.created_at.strftime("%Y-%m"), 0) + 1
-        return {"tickets": len(repo.all()), "open": len(repo.open_queue()), "first_date": repo.first_day.date().isoformat(),
-                "last_created": max(t.created_at for t in repo.all()).date().isoformat(), "as_of": repo.as_of.isoformat(timespec="minutes"),
-                "as_of_is_manual": repo.as_of_is_manual, "months": [{"month": k, "tickets": v} for k, v in sorted(months.items())]}
+    @property
+    def ok(self) -> bool:
+        return self.frame is not None
 
-    def status(self, repo: TicketRepository) -> dict:
-        up = self.store.uploaded()
-        return {**self.window(repo), "uploaded_tickets": 0 if up is None else len(up), "columns": COLUMNS,
-                "original_tickets": int(len(pd.read_csv(self.base_path, usecols=["ticket_id"])))}
+    def public(self) -> dict:
+        return {"id": self.id, "name": self.name, "kind": self.kind, "tickets": self.tickets, "first": self.first, "last": self.last,
+                "status": "ok" if self.ok else "problem", "problems": self.problems[:3], "selected": self.selected,
+                "modified": pd.Timestamp(self.modified, unit="s").isoformat(timespec="minutes")}
 
-    def inspect(self, raw: bytes, repo: TicketRepository, as_of: Optional[str]) -> dict:
-        """Check a file and say what applying it would do. Nothing is saved."""
-        if as_of:
+
+def _blank_to_missing(clean: pd.DataFrame) -> pd.DataFrame:
+    return clean.mask(clean.eq(""))
+
+
+def window(repo: TicketRepository) -> dict:
+    months = {}
+    for t in repo.all():
+        key = t.created_at.strftime("%Y-%m")
+        months[key] = months.get(key, 0) + 1
+    return {"tickets": len(repo.all()), "open": len(repo.open_queue()), "first_date": repo.first_day.date().isoformat(),
+            "last_created": max(t.created_at for t in repo.all()).date().isoformat(), "as_of": repo.as_of.isoformat(timespec="minutes"),
+            "as_of_is_manual": repo.as_of_is_manual, "months": [{"month": k, "tickets": v} for k, v in sorted(months.items())]}
+
+
+class DataCatalog:
+    """Finds the datasets on disk, remembers which ones are switched on, and hands the chosen ones to the app."""
+
+    def __init__(self, base_path: Path = config.DATA_PATH, uploads_dir: Path = config.UPLOADS_DIR, state_dir: Path = config.STATE_DIR):
+        self.base_path, self.uploads_dir, self.state_dir = Path(base_path), Path(uploads_dir), Path(state_dir)
+        self.uploads_dir.mkdir(parents=True, exist_ok=True)
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.settings_path = self.state_dir / "data_settings.json"
+        self._cache: dict = {}
+        self._lock = threading.RLock()
+        legacy = self.state_dir / "uploaded_tickets.csv"          # older versions kept all uploads in one hidden file
+        if legacy.exists() and not (self.uploads_dir / legacy.name).exists():
+            legacy.replace(self.uploads_dir / legacy.name)
+
+    # ---- what is on disk ---------------------------------------------------------------------------------
+    def _files(self) -> List[Path]:
+        uploads = sorted((p for p in self.uploads_dir.glob("*.csv") if p.is_file()), key=lambda p: (p.stat().st_mtime_ns, p.name))
+        return ([self.base_path] if self.base_path.exists() else []) + uploads
+
+    def signature(self) -> tuple:
+        """Changes whenever a dataset file or the settings change, so the app knows to reload."""
+        stat = lambda p: (p.name, p.stat().st_mtime_ns, p.stat().st_size) if p.exists() else (p.name, 0, 0)
+        return tuple(stat(p) for p in self._files()) + (stat(self.settings_path),)
+
+    def settings(self) -> dict:
+        try:
+            data = json.loads(self.settings_path.read_text())
+        except (OSError, ValueError):
+            data = {}
+        return {"excluded": list(data.get("excluded", [])), "as_of": data.get("as_of") or None}
+
+    def _save_settings(self, excluded: List[str], as_of: Optional[str]) -> None:
+        with self._lock:
+            self.settings_path.write_text(json.dumps({"excluded": sorted(excluded), "as_of": as_of}))
+
+    def _load(self, path: Path) -> Dataset:
+        st = path.stat()
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        if key not in self._cache:
+            original = path == self.base_path
+            ds = Dataset(ORIGINAL_ID if original else path.name, "Original data" if original else path.name,
+                         "original" if original else "upload", st.st_mtime)
             try:
-                pd.Timestamp(as_of)
-            except ValueError:
-                raise UploadError("The 'data pulled on' date is not a valid date.")
+                if original:
+                    frame = pd.read_csv(path, dtype=str)                       # the file from the case study is trusted
+                else:
+                    res = check_rows(read_upload(path.read_bytes()), set(config.REQUIRED_INFO))
+                    if res["errors"]:
+                        first = res["errors"][0]
+                        ds.problems = [f"{'Row ' + str(first['row']) + ', ' if first['row'] else ''}{first['column'] or 'file'}: {first['message']}"]
+                        if len(res["errors"]) > 1:
+                            ds.problems.append(f"{len(res['errors']) - 1} more problem(s)")
+                    frame = None if res["errors"] else _blank_to_missing(res["clean"])
+            except UploadError as e:
+                ds.problems, frame = [str(e)], None
+            if frame is not None:
+                created = pd.to_datetime(frame["created_at"])
+                ds.frame, ds.tickets = frame, len(frame)
+                ds.first, ds.last = created.min().date().isoformat(), created.max().date().isoformat()
+            self._cache[key] = ds
+        return self._cache[key]
+
+    def datasets(self) -> List[Dataset]:
+        excluded = set(self.settings()["excluded"])
+        out = []
+        for p in self._files():
+            ds = self._load(p)
+            ds.selected = ds.ok and ds.id not in excluded
+            out.append(ds)
+        return out
+
+    def selected_frames(self) -> List[pd.DataFrame]:
+        return [d.frame for d in self.datasets() if d.selected]
+
+    # ---- changing what is used ---------------------------------------------------------------------------
+    def apply_selection(self, selected: Optional[List[str]], as_of: Optional[str], as_of_given: bool) -> None:
+        with self._lock:
+            current, ds = self.settings(), self.datasets()
+            chosen = {d.id for d in ds if d.selected} if selected is None else set(selected)
+            unknown = chosen - {d.id for d in ds}
+            if unknown:
+                raise UploadError("Unknown dataset: " + ", ".join(sorted(unknown)))
+            usable = {d.id for d in ds if d.ok} & chosen
+            if not usable:
+                raise UploadError("Choose at least one dataset that has no problems.")
+            if as_of_given and as_of:
+                try:
+                    pd.Timestamp(as_of)
+                except ValueError:
+                    raise UploadError("That is not a valid date.")
+            self._save_settings([d.id for d in ds if d.ok and d.id not in usable], (as_of or None) if as_of_given else current["as_of"])
+
+    def save_upload(self, name: str, clean: pd.DataFrame) -> str:
+        stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name or "tickets").stem).strip("._") or "tickets"
+        with self._lock:
+            path, n = self.uploads_dir / f"{stem[:60]}.csv", 2
+            while path.exists():
+                path, n = self.uploads_dir / f"{stem[:60]}-{n}.csv", n + 1
+            clean.to_csv(path, index=False)
+        return path.name
+
+    def delete_upload(self, dataset_id: str) -> None:
+        if dataset_id == ORIGINAL_ID:
+            raise UploadError("The original data is part of the project. Untick it to stop using it.")
+        path = self.uploads_dir / dataset_id
+        if Path(dataset_id).name != dataset_id or not path.is_file():
+            raise KeyError(dataset_id)
+        with self._lock:
+            path.unlink()
+
+    # ---- reports -----------------------------------------------------------------------------------------
+    def status(self, repo: Optional[TicketRepository]) -> dict:
+        ds = self.datasets()
+        return {"folder": "data/uploads", "columns": COLUMNS, "datasets": [d.public() for d in ds],
+                "selected_count": sum(d.selected for d in ds), "as_of_setting": self.settings()["as_of"],
+                "current": window(repo) if repo is not None else None}
+
+    def inspect(self, raw: bytes, repo: Optional[TicketRepository]) -> dict:
+        """Check a file and say what adding it would do. Nothing is saved."""
         df = read_upload(raw)
-        known = {t.category for t in repo.all()}
-        res = check_rows(df, known)
+        res = check_rows(df, set(config.REQUIRED_INFO))
         report = {"rows": int(len(df)), "errors": res["errors"][:MAX_SHOWN], "error_count": len(res["errors"]),
                   "warnings": res["warnings"][:MAX_SHOWN], "warning_count": len(res["warnings"]), "ok": not res["errors"]}
         if res["errors"]:
             return {**report, "clean": None}
         clean = res["clean"]
-        existing = {t.ticket_id for t in repo.all()}
+        existing = {t.ticket_id for t in repo.all()} if repo is not None else set()
         replaced = int(clean.ticket_id.isin(existing).sum())
-        merged_upload = self._merge_uploads(clean)
-        preview = TicketRepository().load_csv(self.base_path, extra=merged_upload, as_of=as_of or None)
-        if as_of and end_of_day(as_of) < preview.latest_event:
-            report.update(ok=False, error_count=1, errors=[{"row": None, "column": "as_of", "message":
-                f"The 'data pulled on' date is earlier than the latest ticket activity ({preview.latest_event:%d %b %Y}). Use that date or later."}])
-            return {**report, "clean": None}
-        loaded_to = max(t.created_at for t in repo.all())
-        gap = (pd.Timestamp(clean.created_at.min()) - pd.Timestamp(loaded_to)).days
-        if gap > 7:
-            report["warnings"].append({"row": None, "column": "created_at", "message":
-                f"There is a gap: the loaded data ends on {loaded_to:%d %b} and this file starts on {pd.Timestamp(clean.created_at.min()):%d %b}. "
-                "The weekly charts will show empty weeks in between. Upload the missing days too if you have them."})
-            report["warning_count"] += 1
-        before = {m["month"]: m["tickets"] for m in self.window(repo)["months"]}
-        after = self.window(preview)
+        preview = TicketRepository().load_frames(self.selected_frames() + [_blank_to_missing(clean)], self.settings()["as_of"])
+        before = window(repo) if repo is not None else None
         report.update(new_tickets=int(len(clean) - replaced), replaced_tickets=replaced,
                       file_from=str(clean.created_at.min())[:10], file_to=str(clean.created_at.max())[:10],
-                      before={"tickets": len(repo.all()), "as_of": repo.as_of.isoformat(timespec="minutes"), "open": len(repo.open_queue())},
-                      after=after, months=[{**m, "was": before.get(m["month"], 0)} for m in after["months"]])
-        return {**report, "clean": merged_upload}
-
-    def _merge_uploads(self, clean: pd.DataFrame) -> pd.DataFrame:
-        old = self.store.uploaded()
-        both = clean if old is None else pd.concat([old, clean], ignore_index=True)
-        return both.drop_duplicates("ticket_id", keep="last").reset_index(drop=True)
+                      before={"tickets": before["tickets"], "as_of": before["as_of"], "open": before["open"]} if before else None,
+                      after=window(preview))
+        if before:
+            loaded_to = max(t.created_at for t in repo.all())
+            gap = (pd.Timestamp(clean.created_at.min()) - pd.Timestamp(loaded_to)).days
+            if gap > 7:
+                report["warnings"].append({"row": None, "column": "created_at", "message":
+                    f"There is a gap: the loaded data ends on {loaded_to:%d %b} and this file starts on {pd.Timestamp(clean.created_at.min()):%d %b}. "
+                    "The weekly charts will show empty weeks in between. Upload the missing days too if you have them."})
+                report["warning_count"] += 1
+        was = {m["month"]: m["tickets"] for m in before["months"]} if before else {}
+        report["months"] = [{**m, "was": was.get(m["month"], 0)} for m in report["after"]["months"]]
+        return {**report, "clean": clean}

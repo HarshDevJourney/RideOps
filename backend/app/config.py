@@ -4,7 +4,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_PATH = BASE_DIR / "data" / "rideops_support_tickets.csv"
-STATE_DIR = BASE_DIR / "data" / "state"    # agent feedback, uploaded ticket files and their settings (a Docker volume)
+UPLOADS_DIR = BASE_DIR / "data" / "uploads"   # one CSV per upload. Delete a file here and it is no longer used
+STATE_DIR = BASE_DIR / "data" / "state"    # agent feedback and which datasets are switched on (a Docker volume)
 FEEDBACK_PATH = STATE_DIR / "feedback.json"
 
 # The "as of" date now comes from the data itself (the latest timestamp in the tickets, or the date typed on the

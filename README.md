@@ -8,7 +8,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js_15-000000?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-42_passing-2ea44f)
+![Tests](https://img.shields.io/badge/tests-51_passing-2ea44f)
 
 <img src="docs/screenshots/overview.png" alt="Overview page" width="900">
 
@@ -46,7 +46,7 @@ The backlog grows from more volume plus an escalate-and-bounce loop, not only fr
 | **Clients** | Lead | Whether one client drives escalations |
 | **Success measure** | Lead, Head of Ops | Weekly baseline, latest and target for six measures |
 | **Backtest** | Lead | Would the predictions have worked in the past? |
-| **Add data** | Lead | Upload more months of tickets |
+| **Datasets** | Lead | Pick which data to analyse. Upload more months |
 
 <table>
 <tr>
@@ -83,19 +83,30 @@ npm run dev
 
 Needs Python 3.10+ and Node 20+. Check it works: http://localhost:8000/api/health should return `"tickets":1444`.
 
-## Add more months of tickets
+## Choose your data
 
-Open **Add data**, then:
+Open **Datasets**. Every CSV is a dataset, and you tick the ones every page should analyse.
 
-1. **Choose** a CSV with the same columns as the original (there is a template button).
-2. **Check file.** Problems are listed by row and column. Nothing is saved yet.
-3. **Add to the app.** Every page updates.
+<img src="docs/screenshots/datasets.png" alt="Datasets page" width="800">
 
-<img src="docs/screenshots/add-data.png" alt="Add data page" width="800">
+| Dataset | Where it lives |
+|---|---|
+| **Original data** (Jul to Sep 2026) | `backend/data/rideops_support_tickets.csv` |
+| **Anything you upload** | `backend/data/uploads/*.csv`, one file per upload |
 
-- New ticket IDs are added. Existing IDs are replaced, so open tickets can get their close date.
-- "Today" comes from the latest date in the data. You can type a different date.
-- The original CSV is never changed. **Remove uploaded data** goes back to it.
+- **See it:** open the `backend/data/uploads/` folder. Each upload is a file there.
+- **Delete it:** delete the file, and the app stops using it. No restart. (The Delete button on the page does the same.)
+- **Drop one in:** copy a CSV into that folder and it appears on the page.
+- **Mix them:** tick one month, or all. If two files have the same ticket ID, the newer file wins, so a later export can close old tickets.
+- **Untick the original** to analyse only your new data.
+
+**To upload:** choose a file, press **Check file**, review, then **Save and use**.
+Problems are listed by row and column, and nothing is saved until you confirm.
+
+"Today" is the latest date in the chosen data. You can set a "data pulled on" date instead.
+
+> Docker: `backend/data/uploads` is mounted into the container, so the files appear on your machine.
+> On Linux, if saving fails, run `chmod a+rwx backend/data/uploads`.
 
 ## Tags
 
@@ -140,10 +151,11 @@ backend/
     checks/        EscalationGate, KnownIssueMatcher, ReopenGuard
     models/        Ticket, Verdict
     repository/    the only code that reads the CSV
-    services/      triage, metrics, history learner, backtester, data upload, feedback
+    services/      triage, metrics, history learner, backtester, datasets, feedback
     config.py      thresholds and assumptions
-  data/            the two CSV files
-  tests/           42 tests
+  data/            the original CSV files
+    uploads/       your uploaded CSVs (one file each)
+  tests/           51 tests
 frontend/
   app/             one folder per page
   components/      charts, drawer, forms, sidebar
@@ -164,20 +176,21 @@ docs/screenshots/  images used in this README
 | `POST /api/feedback` | Agent agrees or disagrees |
 | `GET /api/metrics/*` | `summary`, `weekly`, `yield`, `bounce`, `agents`, `categories`, `category-trend`, `top-clients`, `success` |
 | `GET /api/backtest?split=YYYY-MM-DD` | Backtest result |
-| `GET /api/data/status` | What data is loaded |
-| `POST /api/data/upload?dry_run=true` | Check a CSV (send it as the body). Use `false` to add it |
-| `DELETE /api/data/upload` | Remove uploaded data |
+| `GET /api/data/status` | Every dataset, which are in use, and what they add up to |
+| `POST /api/data/upload?dry_run=true&name=file.csv` | Check a CSV (send it as the body). Use `false` to save it in the uploads folder |
+| `PUT /api/data/selection` | Choose datasets: `{"selected": ["original", "file.csv"]}`. Optional `"as_of"` date |
+| `DELETE /api/data/datasets/{file}` | Delete an uploaded file |
 
 </details>
 
 ## Tests
 
 ```bash
-cd backend && python -m pytest -q      # 42 passed
+cd backend && python -m pytest -q      # 51 passed
 cd frontend && npm run typecheck
 ```
 
-The tests recompute the headline numbers straight from the raw CSV and cover upload checks, bad input and "no future data in the backtest".
+The tests recompute the headline numbers straight from the raw CSV and cover datasets (tick, upload, delete a file from the folder), bad input and "no future data in the backtest".
 
 ## Honest limits
 

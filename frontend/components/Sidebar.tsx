@@ -21,7 +21,7 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: React
     { href: '/backtest', label: 'Backtest', icon: I(<><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5M12 7v5l3 2" /></>) },
   ] },
   { title: 'Data', items: [
-    { href: '/data', label: 'Add data', icon: I(<><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></>) },
+    { href: '/data', label: 'Datasets', icon: I(<><path d="M12 16V4M7 9l5-5 5 5" /><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" /></>) },
   ] },
 ];
 

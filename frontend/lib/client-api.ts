@@ -14,5 +14,6 @@ export const api = {
   /** Send a file as the raw request body (used by the Data page). */
   upload: (path: string, file: Blob) => call(path, { method: 'POST', headers: { 'Content-Type': 'text/csv' }, body: file }),
   get: (path: string) => call(path),
+  put: (path: string, body: unknown) => call(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   post: (path: string, body: unknown) => call(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
 };

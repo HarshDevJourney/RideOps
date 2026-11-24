@@ -4,7 +4,7 @@ export type Fmt = 'pct' | 'hours' | 'num';
 
 export interface TagMeta { label: string; kind: 'fact' | 'prediction'; tone: string; help: string }
 export interface Meta {
-  as_of: string; first_date: string; tags: Record<string, TagMeta>; categories: string[]; required_info: Record<string, string[]>;
+  as_of: string; first_date: string; datasets: string[]; tags: Record<string, TagMeta>; categories: string[]; required_info: Record<string, string[]>;
   default_split: string; split_min: string; split_max: string; tickets: number; open: number;
 }
 export interface Verdict {
@@ -19,14 +19,21 @@ export interface QueueData {
   items: QueueItem[]; tag_counts: Record<string, number>; age_histogram: number[];
   totals: { open: number; with_l1: number; with_engineering: number; hold: number; p1: number; l1_action: number };
 }
-export interface DataStatus {
+export interface Dataset {
+  id: string; name: string; kind: 'original' | 'upload'; tickets: number; first: string; last: string;
+  status: 'ok' | 'problem'; problems: string[]; selected: boolean; modified: string;
+}
+export interface DataWindow {
   tickets: number; open: number; first_date: string; last_created: string; as_of: string; as_of_is_manual: boolean;
-  months: { month: string; tickets: number }[]; uploaded_tickets: number; original_tickets: number; columns: string[];
+  months: { month: string; tickets: number }[];
+}
+export interface DataStatus {
+  folder: string; columns: string[]; datasets: Dataset[]; selected_count: number; as_of_setting: string | null; current: DataWindow | null;
 }
 export interface UploadIssue { row: number | null; column: string | null; message: string }
 export interface UploadReport {
-  ok: boolean; applied: boolean; rows: number; error_count: number; errors: UploadIssue[]; warning_count: number; warnings: UploadIssue[];
+  ok: boolean; applied: boolean; saved_as: string | null; rows: number; error_count: number; errors: UploadIssue[]; warning_count: number; warnings: UploadIssue[];
   new_tickets?: number; replaced_tickets?: number; file_from?: string; file_to?: string;
-  before?: { tickets: number; as_of: string; open: number };
-  after?: DataStatus; months?: { month: string; tickets: number; was: number }[];
+  before?: { tickets: number; as_of: string; open: number } | null;
+  after?: DataWindow; months?: { month: string; tickets: number; was: number }[];
 }

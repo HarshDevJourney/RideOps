@@ -19,7 +19,7 @@ def meta(ctx: AppContext = Depends(get_ctx)):
     return {"as_of": ctx.repo.as_of.isoformat(timespec="minutes"), "first_date": ctx.repo.first_day.date().isoformat(), "tags": TAG_META,
             "categories": sorted(config.REQUIRED_INFO), "required_info": config.REQUIRED_INFO,
             "default_split": bt["default"], "split_min": bt["min"], "split_max": bt["max"], "tickets": len(ctx.repo.all()),
-            "open": len(ctx.repo.open_queue())}
+            "open": len(ctx.repo.open_queue()), "datasets": [d.name for d in ctx.catalog.datasets() if d.selected]}
 
 
 @router.get("/queue")
