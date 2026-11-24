@@ -111,7 +111,7 @@ export function DataClient({ status }: { status: DataStatus }) {
           Files live in <code>backend/{status.folder}</code>. Delete a file there and it is no longer used. A CSV you copy there shows up here.
           If two files have the same ticket ID, the newer file is used, so a later export can close tickets that were open before.</p>
         <div className="toolbar" style={{ marginTop: 10 }}>
-          <label className="f" style={{ margin: 0 }}>Data pulled on (optional)
+          <label className="f" style={{ margin: 0, gridAutoFlow: 'column', alignItems: 'center' }}>Data pulled on (optional)
             <input className="in" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} style={{ width: 'auto' }} /></label>
           <button className="btn" disabled={busy || asOf === (status.as_of_setting ?? '')} onClick={() => saveDate(asOf)}>Save date</button>
           {status.as_of_setting ? <button className="btn" disabled={busy} onClick={() => { setAsOf(''); saveDate(''); }}>Use automatic</button> : null}

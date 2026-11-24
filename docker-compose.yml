@@ -26,10 +26,5 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  tests:                      # docker compose --profile test run --rm tests
-    build: ./backend
-    command: ["python", "-m", "pytest", "-q"]
-    profiles: ["test"]
-
 volumes:
   triage-state:
